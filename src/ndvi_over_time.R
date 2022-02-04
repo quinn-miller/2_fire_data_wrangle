@@ -57,7 +57,7 @@ ggplot(ndvi_month,aes(x=month,y=mean_NDVI,color=site)) +
   theme(legend.position=c(0.6,0.2))
 
 
-## Adding another groupd called treatment (pre or post-burn)
+## Adding another group called treatment (pre or post-burn)
 ndvi_month_pre_post <- ndvi_long %>% 
   mutate(year = year(DateTime),
          month = month(DateTime),

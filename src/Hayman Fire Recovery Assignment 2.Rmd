@@ -1,11 +1,11 @@
 ---
 title: "Hayman Fire Recovery"
-author: "Matthew Ross"
-date: "10/3/2019"
+author: "Quinn Miller"
+date:  "`r format(Sys.time(), '%B %d, %Y')`"
 output: html_document
 ---
 
-```{r setup, warning=F,message=F}
+```{r setup, warning=F,message=F, include =FALSE}
 library(tidyverse)
 library(tidyr)
 library(ggthemes)
@@ -18,7 +18,7 @@ knitr::opts_knit$set(root.dir='..')
 ```
 
 
-```{r dataread, warning=F,message=F}
+```{r dataread, warning=F,message=F, include=F}
 ####-----Reading in Data and Stacking it ----- ####
 #Reading in files
 files <- list.files('data',full.names=T)
@@ -40,56 +40,153 @@ ndvi <- read_csv(files[3])%>%
 
 # Stack as a tidy dataset
 full_long <- rbind(ndvi,ndmi,ndsi) %>%
-  gather(key='site',value='value',-DateTime,-data) %>%
+  pivot_longer(c(burned,unburned), names_to = "site", values_to = "value") %>%
   filter(!is.na(value))
-
 
 ```
 
+## Question 1 
 
+What is the correlation between NDVI and NDMI?
 
+The normalized difference vegetation index (NDVI) and normalized difference moisture index (NDMI) have a strong positive linear relationship. NDVI is a measure of how much of the ground is covered by healthy green vegetation-- low values indicate bare soil, and high values suggest dense green leaves. NDMI is used to measure vegetation water content, where low values indicate vegetative water stress (Gao B.C. 1996). The graph below shows a clear distinction between the burned and unburned sites; the burned sites have much lower NDMI and NDVI.
 
-## Question 1) 
+```{r, echo=FALSE}
+#Q1
+full_wide <- pivot_wider(data=full_long,names_from='data',values_from='value') %>%
+  filter_if(is.numeric,all_vars(!is.na(.))) %>%
+  mutate(month = month(DateTime),
+         year = year(DateTime))
 
-What is the correlation between NDVI and NDMI? - here I want you to
-convert the full_long dataset in to a wide dataset using the 
-function "spread" and then make a plot that shows the correlation s a
-function of if the site was burned or not (x axis should be ndmi)
-You should exclude winter months and focus on summer months
+summer_only <- filter(full_wide,month %in% c(6,7,8,9))
 
+ggplot(summer_only,aes(x=ndmi,y=ndvi,color=site)) + 
+  geom_point() + 
+  theme_few() + 
+  scale_color_few() + 
+  theme(legend.position=c(0.8,0.8))
+```
 
 
 ## Question 2 
 
-2) What is the correlation between average NDSI (normalized
+ What is the correlation between average NDSI (normalized
  snow index) for January - April and average NDVI for June-August?
 In other words, does the previous year's snow cover influence vegetation
  growth for the following summer?
+ 
+ There is a very weak positive correlation between average winter NDSI and average summer NDVI. It does not appear as though the previous year's snow cover has much of an influence on the following summer's vegetation.
+
+```{r, echo=FALSE}
+#Q2
+ndvi_summer <- filter(full_wide, month %in% c(6,7,8))%>%
+  group_by(year) %>%
+  mutate(avg_ndvi = mean(ndvi)) %>%
+  select(year, avg_ndvi) %>%
+  distinct()
+
+ndsi_winter <- filter(full_wide, month %in% c(1,2,3,4))%>%
+  group_by(year) %>%
+  mutate(avg_ndsi = mean(ndsi)) %>%
+  select(year, avg_ndsi) %>%
+  distinct()
+  
+summer_winter <- full_join(ndvi_summer, ndsi_winter, by = "year")
+
+ggplot(data=summer_winter,aes(x=avg_ndsi,y=avg_ndvi)) + 
+  geom_point() + 
+  theme_few() + 
+  geom_smooth(method = "lm", formula = y~x)
+  
+
+```
 
 
-## Q3
+## Question 3
 
-How is the snow effect from question 2 different between pre- and post-burn
-and burned and unburned? 
+How is the snow effect from question 2 different between pre- and post-burn and burned and unburned? 
+
+The graph below shows how the Hayman Fire influenced the relationship between mean NDSI and mean NDVI in the sample area. The unburned plot shows little distinction between the pre- and post-burn conditions, whereas the burned plot shows a marked difference between the two. In general, the relationship described in the answer to question two is the same once the burn is taken into account; post-burn NDVI values are just noticeably lower.
+
+```{r, echo=FALSE, message = FALSE}
+#Q3
+ndsi_prepost <- full_wide %>% 
+  mutate(treatment = cut(year,breaks=c(1983,2001, 2019),
+                         labels=c('pre-burn','post-burn'))) %>%
+  filter(month %in% c(1,2,3,4)) %>%
+  group_by(year,site,treatment) %>%
+  summarize(mean_ndsi = mean(ndsi))
+
+ndvi_prepost <- full_wide %>% 
+  mutate(treatment = cut(year,breaks=c(1983,2001, 2019),
+                         labels=c('pre-burn','post-burn'))) %>%
+  filter(month %in% c(6,7,8)) %>%
+  group_by(year,site,treatment) %>%
+  summarize(mean_ndvi = mean(ndvi))
+
+summer_winter_pre_post <- inner_join(ndvi_prepost, ndsi_prepost, by = c("year", "site", "treatment"))
+  
+
+ggplot(summer_winter_pre_post,aes(x=mean_ndsi,y=mean_ndvi, color = treatment)) + 
+  geom_point() +
+  theme_few() + 
+  scale_color_few()+
+  facet_wrap(~site)
+
+```
+
 
 
 ## Question 4
 
 What month is the greenest month on average? 
 
+Averaging across the burned and unburned sites, and using NDVI to determine green vegetation, it appears that August is the greenest month on average for the time period 1984-2019.
+
+```{r, echo=FALSE}
+#Q4
+green <- full_wide %>%
+  group_by(month) %>%
+  summarize(mean_ndvi = mean(ndvi))
+
+ggplot(green,aes(x=month,y=mean_ndvi)) +
+  geom_point()+
+  geom_line() +
+  theme_few() 
+
+```
 
 
 
-## Question 5) 
+## Question 5 
 
 What month is the snowiest on average?
 
+Averaging across the burned and unburned sites, and using NDSI to determine snow cover, it appears that January is the snowiest month on average for the time period 1984-2019.
 
-## Bonus Question: Redo all problems with `spread` and `gather` using modern tidyverse syntax. 
+```{r, echo=FALSE}
+#Q5
+snow <- full_wide %>%
+  group_by(month) %>%
+  summarize(mean_ndsi = mean(ndsi))
+
+ggplot(snow,aes(x=month,y=mean_ndsi)) +
+  geom_point()+
+  geom_line() +
+  theme_few()
 
 
-## Bonus Question: Use Climage Engine to pull the same data for the assignment, but updated with 2020/2021 data.
+```
+
+### Bonus Question: Redo all problems with `spread` and `gather` using modern tidyverse syntax. 
 
 
+### Bonus Question: Use Climage Engine to pull the same data for the assignment, but updated with 2020/2021 data.
+
+## Appendix
+
+```{r ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
+
+```
 
 
